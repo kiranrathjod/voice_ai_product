@@ -314,8 +314,9 @@ class Reset_Password_API(APIView):
 
             # Delete OTP 
             User_OTP_Master.objects.filter(user=user).delete()
+            refresh = RefreshToken.for_user(user)
 
-            return Response({'status': 1, 'message': 'Password reset successfully. You can now log in.','data':None}, status=200)
+            return Response({'status': 1,'message': 'Password reset successfully.','data': {'refresh': str(refresh),'access': str(refresh.access_token),}}, status=200)
         except Exception as e:
             return Response({'status': 0, 'message': 'Internal Server Error', 'data': None},status=200)
         
