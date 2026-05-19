@@ -1,13 +1,11 @@
-import re
 from rest_framework import serializers
-from User.models import AdminTempUser
-
+from User.models import *
 
 class AdminRegisterSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = AdminTempUser
-        fields = ['username', 'email', 'phone', 'password']
+        fields = ['username', 'email', 'phone', 'password','photo']
 
     def validate_phone(self, value):
 
@@ -17,19 +15,18 @@ class AdminRegisterSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Phone number must be exactly 10 digits.")
         return value
 
-    def validate_password(self, value):
-        if len(value) < 8:
-            raise serializers.ValidationError("Password must be at least 8 characters.")
+class UserUpdateSerializer(serializers.ModelSerializer):
 
-        if not re.search(r'[A-Z]', value):
-            raise serializers.ValidationError("Password must contain at least 1 capital letter.")
+    class Meta:
+        model = User_Master
+        fields = ['username', 'phone', 'photo']
 
-        if not re.search(r'[a-z]', value):
-            raise serializers.ValidationError("Password must contain at least 1 small letter.")
+    def validate_phone(self, value):
 
-        if not re.search(r'[0-9]', value):
-            raise serializers.ValidationError("Password must contain at least 1 number.")
+        if not value.isdigit():
+            raise serializers.ValidationError("Phone number must contain only numbers.")
 
-        if not re.search(r'[@$!%*?&]', value):
-            raise serializers.ValidationError("Password must contain at least 1 special character.")
+        if len(value) != 10:
+            raise serializers.ValidationError("Phone number must be exactly 10 digits.")
+
         return value

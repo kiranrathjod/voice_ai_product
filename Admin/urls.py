@@ -9,12 +9,13 @@ urlpatterns = [
 
     path('api/v1/auth/login', LoginAPI.as_view()),
     path('api/v1/auth/verify-login', VerifyLoginAPI.as_view()),
-    path('api/v1/auth/resend-login-otp', LoginOtpResendAPI.as_view()),
+    path('api/v1/auth/resend-login-otp', LoginOTPResendAPI.as_view()),
 
     path('api/v1/auth/forgot-password/', ForgotPasswordAPI.as_view()),
     path('api/v1/auth/forgot-password-verify-otp/', Forgot_Otp_API.as_view()),
     path('api/v1/auth/reset-password/', Resend_Forgot_Otp_API.as_view()),
     path('api/v1/auth/change-password/', Reset_Password_API.as_view()),
+
 
     path('logout/', LogoutAPI.as_view()),
 ]

@@ -65,6 +65,16 @@ class User_Master(AbstractBaseUser,PermissionsMixin):
         
     objects = UserManager()
 
+class AdminLoginOTP(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(User_Master,on_delete=models.CASCADE)
+    otp = models.CharField(max_length=6, null=True)   
+    otp_time_limit = models.DateTimeField(null=True, blank=True) 
+    created_at_otp = models.DateTimeField(default=now) 
+
+    class Meta:
+        db_table = 'Login_otp'
+
 
 # this model use in forgot password and reset password api, because both api use otp for verification. 
 class User_OTP_Master(models.Model):

@@ -29,103 +29,70 @@ def send_otp_email(email, otp):
     )
 
 def validate_password(value):
+
     if len(value) < 8:
-        raise serializers.ValidationError({'status':0, "error": "InvalidPasswordFormat","message": "Password must be at least 8 characters long."})
-    
-    if not re.search(r'[A-Z]',value):
-        raise serializers.ValidationError({'status':0,"error": "InvalidPasswordFormat", "message": "Password must include at least one uppercase letter."})
-    
-    if not re.search(r'\d',value):
-        raise serializers.ValidationError({'status':0,"error": "InvalidPasswordFormat", "message":"password must contain at least one numeric charecter"})
-    
-    if not re.search(r'[!@#$%^&*()_+\-=\[\]{};:"\\|,.<>\/?]', value):  
-        raise serializers.ValidationError({'status':0,"error": "InvalidPasswordFormat","message": "Password must contain at least one special character."})
-            
+        raise serializers.ValidationError({'status': 0,'error': 'InvalidPasswordFormat','message': 'Password must be at least 8 characters long.'})
+
+    if not re.search(r'[A-Z]', value):
+        raise serializers.ValidationError({'status': 0,'error': 'InvalidPasswordFormat','message': 'Password must include at least one uppercase letter.'})
+
+    if not re.search(r'[a-z]', value):
+        raise serializers.ValidationError({'status': 0,'error': 'InvalidPasswordFormat','message': 'Password must contain at least one lowercase letter.'})
+
+    if not re.search(r'\d', value):
+        raise serializers.ValidationError({'status': 0,'error': 'InvalidPasswordFormat','message': 'Password must contain at least one numeric character.'})
+
+    if not re.search(r'[!@#$%^&*()_+\-=\[\]{};:"\\|,.<>\/?]', value):
+        raise serializers.ValidationError({'status': 0,'error': 'InvalidPasswordFormat','message': 'Password must contain at least one special character.'})
+
     return value
 
 
 # User Registration with OTP verification, including validation and email sending
-# class UserRegistrationAPI(APIView):
-#     def post(self, request):
-#         serializer = AdminRegisterSerializer(data=request.data)
-#         # Validation check
-#         if serializer.is_valid():
-#             email = serializer.validated_data['email']
-    
-#             # Email already exists
-#             if User_Master.objects.filter(email=email).exists():
-#                 return Response({'status': 0,'message': 'Email already exists','data': None}, status=200)
-
-#             # Generate OTP
-#             otp = generate_otp()
-#             # Save temp user
-#             temp_user = serializer.save()
-#             temp_user.otp = otp
-#             temp_user.otp_time_limit = otp_expiry()
-#             temp_user.save()
-
-#             send_otp_email(temp_user.email, otp)
-
-#             return Response({'status': 1,'message': f'OTP sent to {temp_user.email}','data': None}, status=200)
-#         return Response({'status': 0,'message': 'Validation Error','errors': serializer.errors}, status=200)
-
-
 class UserRegistrationAPI(APIView):
 
     def post(self, request):
-
-        user=request.user
-        if user.user_type.user_type_name != 'Admin':
-            return Response({'status': 0,'message': 'Only Admin can register new users','data': None}, status=200)
-        
         serializer = AdminRegisterSerializer(data=request.data)
 
-        # VALIDATION
         if serializer.is_valid():
+            password = serializer.validated_data.get('password')
+
+            # Password Validation
+            try:
+                validate_password(password)
+
+            except serializers.ValidationError as e:
+                return Response({'status': 0,'message': 'Validation Error','errors': e.detail},status=200)
 
             email = serializer.validated_data['email']
 
-            # EMAIL ALREADY EXISTS
+            # Email Exists Check
             if User_Master.objects.filter(email=email).exists():
+                return Response({'status': 0,'message': 'Email already exists','data': None},status=200)
 
-                return Response({
-                    'status': 0,
-                    'message': 'Email already exists',
-                    'data': None
-                }, status=200)
-
-            # DUMMY OTP FOR TESTING
-            otp = "111111"
-
-            # SAVE USER
+            # Generate OTP
+            otp = generate_otp()
+            # Save Temp User
             temp_user = serializer.save()
-
-            # SAVE OTP
             temp_user.otp = otp
-
             temp_user.otp_time_limit = otp_expiry()
-
             temp_user.save()
 
-            # EMAIL DISABLED FOR TESTING
-            # send_otp_email(temp_user.email, otp)
+            # Send OTP Email
+            send_otp_email(temp_user.email, otp)
 
-            return Response({
+            # Success Response with User Data
+            return Response({'status': 1,'message': 'OTP sent successfully',
+                    'data': {
+                        'id': temp_user.id,
+                        'username': temp_user.username,
+                        'email': temp_user.email,
+                        'phone': temp_user.phone,
+                        'photo': request.build_absolute_uri(temp_user.photo.url) if temp_user.photo else None}},status=200)
+          
 
-                'status': 1,
-                'message': 'OTP sent successfully',
-                'otp': otp,   # OPTIONAL FOR TESTING
-                'data': None
+        return Response({'status': 0,'message': 'Validation Error','errors': serializer.errors},status=200)
 
-            }, status=200)
-
-        return Response({
-
-            'status': 0,
-            'message': 'Validation Error',
-            'errors': serializer.errors
-
-        }, status=200)
 # OTP verification for registration, including expiry check, duplicate user check, and JWT token generation upon successful verification.
 class OtpVerificationAPI(APIView):
 
@@ -201,94 +168,32 @@ class OtpResendAPI(APIView):
         send_otp_email(temp_user.email, otp)
         return Response({'status': 1,'message': 'OTP resent successfully'}, status=200)
 
-# class LoginAPI(APIView):
-#     def post(self, request):
-#         email = request.data.get('email')
-#         password = request.data.get('password')
-#         if not email or not password:
-#             return Response({'status': 0,'message': 'Email and password are required',"data": None}, status=200)
-
-#         try:
-#             user = User_Master.objects.get(email=email)
-#             if password != user.password:
-#                 return Response({'status': 0,'message': 'Invalid password',"data": None},status=200)
-#             LoginOTP.objects.filter(user=user).delete()
-#             otp = generate_otp()
-
-#             LoginOTP.objects.create(
-#                 user=user,
-#                 otp=otp,
-#                 otp_time_limit=otp_expiry())
-
-#             send_otp_email(user.email, otp)
-#             return Response({'status': 1,'message': 'Login OTP sent successfully'},status=200)
-#         except User_Master.DoesNotExist:
-#             return Response({'status': 0,'message': 'Email not registered','data': None}, status=200)
-#         except Exception as e:
-#             return Response({'status': 0,'message': 'Login failed. Please check email service or server logs.','data': None}, status=200)
+# Login API that validates credentials, generates OTP for login, and sends it via email.
 class LoginAPI(APIView):
-
     def post(self, request):
-
         email = request.data.get('email')
         password = request.data.get('password')
-
         if not email or not password:
-            return Response({
-                'status': 0,
-                'message': 'Email and password are required',
-                "data": None
-            }, status=200)
+            return Response({'status': 0,'message': 'Email and password are required',"data": None}, status=200)
 
         try:
-
             user = User_Master.objects.get(email=email)
-
             if password != user.password:
-                return Response({
-                    'status': 0,
-                    'message': 'Invalid password',
-                    "data": None
-                }, status=200)
+                return Response({'status': 0,'message': 'Invalid password',"data": None},status=200)
+            AdminLoginOTP.objects.filter(user=user).delete()
+            otp = generate_otp()
 
-            # DELETE OLD OTP
-            LoginOTP.objects.filter(user=user).delete()
-
-            # DUMMY OTP
-            otp = "111111"
-
-            LoginOTP.objects.create(
+            AdminLoginOTP.objects.create(
                 user=user,
                 otp=otp,
-                otp_time_limit=otp_expiry()
-            )
+                otp_time_limit=otp_expiry())
 
-            # OPTIONAL EMAIL
-            # send_otp_email(user.email, otp)
-
-            return Response({
-                'status': 1,
-                'message': 'Login OTP sent successfully',
-                'dummy_otp': otp
-            }, status=200)
-
+            send_otp_email(user.email, otp)
+            return Response({'status': 1,'message': 'Login OTP sent successfully'},status=200)
         except User_Master.DoesNotExist:
-
-            return Response({
-                'status': 0,
-                'message': 'Email not registered',
-                'data': None
-            }, status=200)
-
+            return Response({'status': 0,'message': 'Email not registered','data': None}, status=200)
         except Exception as e:
-
-            print(e)
-
-            return Response({
-                'status': 0,
-                'message': 'Login failed',
-                'data': None
-            }, status=200)
+            return Response({'status': 0,'message': 'Login failed. Please check email service or server logs.','data': None}, status=200)
 
 # OTP verification for login, including expiry check and JWT token generation upon successful verification.
 class VerifyLoginAPI(APIView):
@@ -303,7 +208,7 @@ class VerifyLoginAPI(APIView):
             user = User_Master.objects.get(email=email)
             if not user.email:
                 return Response({'status': 0,'message': 'Email not registered','data': None}, status=200)
-            login_otp = LoginOTP.objects.filter(user=user).order_by('-id').first()
+            login_otp = AdminLoginOTP.objects.filter(user=user).order_by('-id').first()
 
             if not login_otp:
                 return Response({'status':0,'message':'OTP not found',"data": None}, status=200)
@@ -329,20 +234,20 @@ class VerifyLoginAPI(APIView):
             return Response({'status':0,'message':'Internal Server Error',"data": None}, status=200)
 
 # Resend OTP for login, reusing valid OTP or generating a new one if expired, and sending it via email.
-class LoginOtpResendAPI(APIView):
+class LoginOTPResendAPI(APIView):
     def post(self, request):
         email = request.data.get('email')
         try:
             user = User_Master.objects.get(email=email)
             if not user.email:
                 return Response({'status': 0,'message': 'Email not registered','data': None}, status=200)
-            login_otp = LoginOTP.objects.filter(user=user).last()
+            login_otp = AdminLoginOTP.objects.filter(user=user).last()
 
             if login_otp and now() <= login_otp.otp_time_limit:
                 otp = login_otp.otp
             else:
                 otp = generate_otp()
-                LoginOTP.objects.create(user=user,otp=otp,otp_time_limit=otp_expiry())
+                AdminLoginOTP.objects.create(user=user,otp=otp,otp_time_limit=otp_expiry())
 
             send_otp_email(user.email, otp)
 
