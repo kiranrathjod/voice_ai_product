@@ -2,7 +2,6 @@ from rest_framework import serializers
 from User.models import *
 
 class UserRegisterSerializer(serializers.ModelSerializer):
-
     class Meta:
         model = AdminTempUser
         fields = ['username', 'email', 'phone', 'password','photo']
@@ -11,9 +10,7 @@ class UserRegisterSerializer(serializers.ModelSerializer):
 
         # Image size validation (5MB)
         if value.size > 5 * 1024 * 1024:
-            raise serializers.ValidationError(
-                "Image size exceeds 5MB limit."
-            )
+            raise serializers.ValidationError("Image size exceeds 5MB limit.")
 
         return value
     def validate_phone(self, value):
@@ -25,7 +22,6 @@ class UserRegisterSerializer(serializers.ModelSerializer):
         return value
 
 class UserUpdateSerializer(serializers.ModelSerializer):
-
     class Meta:
         model = User_Master
         fields = ['username', 'phone', 'photo']
