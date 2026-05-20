@@ -7,6 +7,15 @@ class UserRegisterSerializer(serializers.ModelSerializer):
         model = AdminTempUser
         fields = ['username', 'email', 'phone', 'password','photo']
 
+    def validate_photo(self, value):
+
+        # Image size validation (5MB)
+        if value.size > 5 * 1024 * 1024:
+            raise serializers.ValidationError(
+                "Image size exceeds 5MB limit."
+            )
+
+        return value
     def validate_phone(self, value):
 
         if not value.isdigit():
@@ -28,5 +37,12 @@ class UserUpdateSerializer(serializers.ModelSerializer):
 
         if len(value) != 10:
             raise serializers.ValidationError("Phone number must be exactly 10 digits.")
+
+        return value
+    def validate_photo(self, value):
+
+        # Image size validation (5MB)
+        if value.size > 5 * 1024 * 1024:
+            raise serializers.ValidationError("Image size exceeds 5MB limit.")
 
         return value
