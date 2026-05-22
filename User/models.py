@@ -24,7 +24,6 @@ class AdminTempUser(models.Model):
         """Check if OTP is still valid (within 3 minutes)."""
         if self.otp_time_limit:
             return now() <= self.otp_time_limit
-
         return False
 
     class Meta:
@@ -53,7 +52,6 @@ class User_Master(AbstractBaseUser,PermissionsMixin):
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='Active')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['username', 'phone_number']
     
@@ -65,12 +63,14 @@ class User_Master(AbstractBaseUser,PermissionsMixin):
         
     objects = UserManager()
 
+# this model use in Admin login otp save 
 class AdminLoginOTP(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(User_Master,on_delete=models.CASCADE)
     otp = models.CharField(max_length=6, null=True)   
     otp_time_limit = models.DateTimeField(null=True, blank=True) 
     created_at_otp = models.DateTimeField(default=now) 
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         db_table = 'Login_otp'
@@ -82,7 +82,76 @@ class User_OTP_Master(models.Model):
     user = models.ForeignKey(User_Master,on_delete=models.CASCADE)
     otp = models.CharField(max_length=6, null=True) 
     created_at = models.DateTimeField(default=now)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         db_table = 'user_otp_master'
-        
+
+# FILE UPLOAD PATH FUNCTION
+def media_file_upload_path(instance, filename):
+
+    if instance.file_type == 'Image':
+        return f'images/{filename}'
+
+    elif instance.file_type == 'Document':
+        return f'documents/{filename}'
+
+    elif instance.file_type == 'Video':
+        return f'videos/{filename}'
+
+    return f'others/{filename}'
+
+class MediaFile(models.Model):
+    FILE_TYPE = (('Image', 'Image'),('Document', 'Document'),('Video', 'Video'))
+    id = models.UUIDField(primary_key=True,default=uuid.uuid4,editable=False)
+    user = models.ForeignKey(User_Master,on_delete=models.CASCADE)
+    file_type = models.CharField(max_length=20,choices=FILE_TYPE)
+    file = models.FileField(upload_to=media_file_upload_path)
+    file_name = models.CharField(max_length=255)
+    file_url = models.URLField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'media_files'
+
+# NOTIFICATION MODEL
+class Notification(models.Model):
+    NOTIFICATION_TYPE = (('Email', 'Email'),('Push', 'Push'))
+    STATUS = (('Unread', 'Unread'),('Read', 'Read'))
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(User_Master, on_delete=models.CASCADE)
+    notification_type = models.CharField(max_length=10, choices=NOTIFICATION_TYPE)
+    title = models.CharField(max_length=255)
+    message = models.TextField()
+    status = models.CharField(max_length=10, choices=STATUS, default='Unread')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    class Meta:
+        db_table = 'notifications'
+
+class Category(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    category_name=models.CharField(max_length=100)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    class Meta:
+        db_table = "Category"
+
+# PRODUCT MODEL (CRUD API)
+class Product(models.Model):
+    STATUS = (('Available', 'Available'),('OutOfStock', 'OutOfStock'))
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    product_name = models.CharField(max_length=255)
+    description = models.TextField()
+    price = models.DecimalField(max_digits=10, decimal_places=2)
+    quantity = models.IntegerField()
+    category = models.ForeignKey(Category, on_delete=models.CASCADE)
+    product_image = models.ImageField(upload_to='products/', null=True, blank=True)
+    product_image_url = models.URLField(null=True,blank=True)
+    status = models.CharField(max_length=20,choices=STATUS,default='Available')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'products'
