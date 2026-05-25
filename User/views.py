@@ -12,7 +12,7 @@ from .models import *
 from .serializers import *
 import random
 import re
-import os
+
 
 def generate_otp():
     return str(random.randint(100000, 999999))
@@ -206,7 +206,7 @@ class ForgotPasswordAPI(APIView):
             User_OTP_Master.objects.create(user=user,otp=otp,otp_time_limit=otp_expiry())
             send_otp_email(user.email, otp)
 
-            return Response({'status': 1,'message': 'OTP sent to your email','data':[{'otp expired in': '3 min'}]}, status=200)
+            return Response({'status': 1,'message': 'OTP sent to your email','data':'otp expired in 3 min'}, status=200)
 
         except Exception as e:
             return Response({'status': 0, 'message': 'Internal Server Error', 'data': None},status=200)            
@@ -335,6 +335,7 @@ class LogoutAPI(APIView):
         except Exception as e:
             return Response({'status': 0,'message': 'Invalid token',"data": None}, status=200)
         
+# delete-user profile api
 class DeleteUserAPI(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -350,7 +351,6 @@ class DeleteUserAPI(APIView):
             return Response({"status": 1, "message": "User deleted successfully"}, status=200)
         except User_Master.DoesNotExist:
             return Response({"status": 0, "message": "User not found","data":None}, status=200)
-
 
 # GET ALL FILES API
 class MediaFileListAPI(APIView):
@@ -381,7 +381,6 @@ class MediaFileListAPI(APIView):
 
         except Exception as e:
             return Response({'status': 0,'message': 'Internal Server Error','data': None}, status=200)
-
 
 # PRODUCT LIST + SINGLE PRODUCT API
 class ProductListAPI(APIView):
@@ -451,10 +450,7 @@ class ProductFilterAPI(APIView):
 
             serializer = ProductSerializer(products, many=True)
 
-            return Response({
-                'status': 1,
-                'message': 'Products fetched successfully',
-                'data': serializer.data}, status=200)
+            return Response({'status': 1,'message': 'Products fetched successfully','data': serializer.data}, status=200)
 
         except Exception as e:
             return Response({'status': 0,'message': str(e),'data': None}, status=200)
@@ -485,15 +481,9 @@ class SortProductAPI(APIView):
                 return Response({'status': 0,'message': 'No products found','data':None}, status=200)
 
             serializer = ProductSerializer(products, many=True)
-        
-            
            
-            return Response({
-                'status': 1,
-                'message': 'Products sorted successfully',
-                'data': serializer.data}, status=200)
+            return Response({'status': 1,'message': 'Products sorted successfully','data': serializer.data}, status=200)
 
         except Exception as e:
             return Response({'status': 0,'message': str(e),'data': None}, status=200)
         
-
