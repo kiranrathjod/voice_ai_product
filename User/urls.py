@@ -24,9 +24,8 @@ urlpatterns = [
     path('api/v1/update-campaign/<uuid:id>', UpdateCampaignAPI.as_view()),
     path('api/v1/delete-campaign/<uuid:id>', DeleteCampaignAPI.as_view()),
 
-    path('voice/', voice),
-
-    path('transcribe/', transcribe),
+    # path('voice/', voice),
+    # path('transcribe/', transcribe),
 ]
 
 

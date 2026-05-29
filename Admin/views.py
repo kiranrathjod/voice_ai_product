@@ -5,7 +5,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework import serializers
 from django.core.mail import send_mail
 from django.contrib.auth.hashers import make_password, check_password
-from User.permissions import IsAdminUserType
+from .permissions import IsAdminUserType
 from rest_framework.permissions import IsAuthenticated
 from django.conf import settings
 from datetime import timedelta

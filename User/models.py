@@ -1,6 +1,6 @@
 from django.db import models
-from django.contrib.auth.models import AbstractBaseUser,UserManager
-from django.contrib.auth.models import PermissionsMixin
+from .manager import UserManager
+from django.contrib.auth.models import PermissionsMixin,AbstractBaseUser
 from django.utils.timezone import now
 import uuid
 
@@ -92,7 +92,7 @@ class Campaign(models.Model):
 class ContactList(models.Model):
     STATUS_CHOICES = (('Processing', 'Processing'),('Completed', 'Completed'),)
     id = models.UUIDField(primary_key=True,default=uuid.uuid4,editable=False)
-    campaign = models.ForeignKey(Campaign,on_delete=models.CASCADE,related_name='contact_lists')
+    campaign = models.ForeignKey(Campaign,on_delete=models.CASCADE,related_name='contact_list')
     file_name = models.CharField(max_length=255)
     file_type = models.CharField(max_length=50)
     upload_status = models.CharField(max_length=50,choices=STATUS_CHOICES,default='Processing')

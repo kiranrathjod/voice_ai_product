@@ -13,74 +13,75 @@ from .serializers import *
 import random
 import re
     
-from django.http import HttpResponse
-from django.views.decorators.csrf import csrf_exempt
-from twilio.twiml.voice_response import VoiceResponse, Gather
 
-from .voice_assistant import (
-    ask_llm,
-    synthesize
-)
+# from django.http import HttpResponse
+# from django.views.decorators.csrf import csrf_exempt
+# from twilio.twiml.voice_response import VoiceResponse, Gather
 
-PUBLIC_URL = "https://YOUR_NGROK_URL.ngrok-free.app"
+# from .voice_assistant import (
+#     ask_llm,
+#     synthesize
+# )
 
-
-@csrf_exempt
-def voice(request):
-
-    vr = VoiceResponse()
-
-    gather = Gather(
-        input="speech",
-        action=f"{PUBLIC_URL}/user/transcribe/",
-        method="POST",
-        speech_timeout="auto",
-        language="en-US",
-    )
-
-    gather.say("Hello! I am your AI assistant. How can I help you?",voice="alice")
-
-    vr.append(gather)
-
-    return HttpResponse(str(vr),content_type="application/xml")
+# PUBLIC_URL = "https://YOUR_NGROK_URL.ngrok-free.app"
 
 
-@csrf_exempt
-def transcribe(request):
+# @csrf_exempt
+# def voice(request):
 
-    user_text = request.POST.get("SpeechResult", "").strip()
-    vr = VoiceResponse()
+#     vr = VoiceResponse()
 
-    if not user_text:
-        vr.say("Sorry I did not catch that.",voice="alice")
-        vr.redirect(f"{PUBLIC_URL}/user/voice/",method="POST")
+#     gather = Gather(
+#         input="speech",
+#         action=f"{PUBLIC_URL}/user/transcribe/",
+#         method="POST",
+#         speech_timeout="auto",
+#         language="en-US",
+#     )
 
-        return HttpResponse(str(vr),content_type="application/xml")
+#     gather.say("Hello! I am your AI assistant. How can I help you?",voice="alice")
 
-    print("USER:", user_text)
+#     vr.append(gather)
 
-    if user_text.lower() in ["bye","goodbye","exit","quit"]:
-        vr.say("Goodbye!",voice="alice")
+#     return HttpResponse(str(vr),content_type="application/xml")
 
-        vr.hangup()
 
-        return HttpResponse(str(vr),content_type="application/xml")
+# @csrf_exempt
+# def transcribe(request):
 
-    # AI RESPONSE
-    reply = ask_llm(user_text)
+#     user_text = request.POST.get("SpeechResult", "").strip()
+#     vr = VoiceResponse()
 
-    print("AI:", reply)
+#     if not user_text:
+#         vr.say("Sorry I did not catch that.",voice="alice")
+#         vr.redirect(f"{PUBLIC_URL}/user/voice/",method="POST")
 
-    # GENERATE AUDIO
-    audio_file = synthesize(reply)
+#         return HttpResponse(str(vr),content_type="application/xml")
 
-    audio_url = f"{PUBLIC_URL}/media/tts_audio/{audio_file}"
+#     print("USER:", user_text)
 
-    vr.play(audio_url)
+#     if user_text.lower() in ["bye","goodbye","exit","quit"]:
+#         vr.say("Goodbye!",voice="alice")
 
-    vr.redirect(f"{PUBLIC_URL}/user/voice/",method="POST")
+#         vr.hangup()
 
-    return HttpResponse(str(vr),content_type="application/xml")
+#         return HttpResponse(str(vr),content_type="application/xml")
+
+#     # AI RESPONSE
+#     reply = ask_llm(user_text)
+
+#     print("AI:", reply)
+
+#     # GENERATE AUDIO
+#     audio_file = synthesize(reply)
+
+#     audio_url = f"{PUBLIC_URL}/media/tts_audio/{audio_file}"
+
+#     vr.play(audio_url)
+
+#     vr.redirect(f"{PUBLIC_URL}/user/voice/",method="POST")
+
+#     return HttpResponse(str(vr),content_type="application/xml")
 
 
 def generate_otp():

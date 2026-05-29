@@ -1,127 +1,127 @@
-import os
-import tempfile
-import time
-import urllib.request
-from pathlib import Path
+# import os
+# import tempfile
+# import time
+# import urllib.request
+# from pathlib import Path
 
-import torch
-import soundfile as sf
+# import torch
+# import soundfile as sf
 
-from transformers import pipeline as hf_pipeline
-from kokoro import KPipeline
+# from transformers import pipeline as hf_pipeline
+# from kokoro import KPipeline
 
-from langchain_groq import ChatGroq
-from langchain_core.messages import HumanMessage, SystemMessage
-
-
-# =========================
-# CONFIG
-# =========================
-
-TWILIO_ACCOUNT_SID = "YOUR_SID"
-TWILIO_AUTH_TOKEN = "YOUR_TOKEN"
-
-GROQ_API_KEY = "YOUR_GROQ_KEY"
-GROQ_MODEL = "llama-3.3-70b-versatile"
-
-BASE_DIR = Path(__file__).resolve().parent.parent
-
-AUDIO_DIR = BASE_DIR / "media" / "tts_audio"
-AUDIO_DIR.mkdir(parents=True, exist_ok=True)
-
-# =========================
-# LOAD MODELS
-# =========================
-
-print("Loading Whisper...")
-
-stt = hf_pipeline(
-    "automatic-speech-recognition",
-    model="openai/whisper-small",
-    device=0 if torch.cuda.is_available() else -1,
-)
-
-print("Loading Kokoro...")
-
-tts = KPipeline(lang_code='b')
-
-print("Loading Groq...")
-
-llm = ChatGroq(
-    api_key=GROQ_API_KEY,
-    model=GROQ_MODEL
-)
-
-SYSTEM_PROMPT = """
-You are a helpful voice assistant.
-Keep answers short.
-"""
+# from langchain_groq import ChatGroq
+# from langchain_core.messages import HumanMessage, SystemMessage
 
 
-# =========================
-# ASK LLM
-# =========================
+# # =========================
+# # CONFIG
+# # =========================
 
-def ask_llm(user_text):
+# TWILIO_ACCOUNT_SID = "YOUR_SID"
+# TWILIO_AUTH_TOKEN = "YOUR_TOKEN"
 
-    messages = [
-        SystemMessage(content=SYSTEM_PROMPT),
-        HumanMessage(content=user_text),
-    ]
+# GROQ_API_KEY = "YOUR_GROQ_KEY"
+# GROQ_MODEL = "llama-3.3-70b-versatile"
 
-    response = llm.invoke(messages)
+# BASE_DIR = Path(__file__).resolve().parent.parent
 
-    return response.content.strip()
+# AUDIO_DIR = BASE_DIR / "media" / "tts_audio"
+# AUDIO_DIR.mkdir(parents=True, exist_ok=True)
+
+# # =========================
+# # LOAD MODELS
+# # =========================
+
+# print("Loading Whisper...")
+
+# stt = hf_pipeline(
+#     "automatic-speech-recognition",
+#     model="openai/whisper-small",
+#     device=0 if torch.cuda.is_available() else -1,
+# )
+
+# print("Loading Kokoro...")
+
+# tts = KPipeline(lang_code='b')
+
+# print("Loading Groq...")
+
+# llm = ChatGroq(
+#     api_key=GROQ_API_KEY,
+#     model=GROQ_MODEL
+# )
+
+# SYSTEM_PROMPT = """
+# You are a helpful voice assistant.
+# Keep answers short.
+# """
 
 
-# =========================
-# TTS
-# =========================
+# # =========================
+# # ASK LLM
+# # =========================
 
-def synthesize(text):
+# def ask_llm(user_text):
 
-    out = AUDIO_DIR / f"reply_{int(time.time()*1000)}.wav"
+#     messages = [
+#         SystemMessage(content=SYSTEM_PROMPT),
+#         HumanMessage(content=user_text),
+#     ]
 
-    generator = tts(text, voice="am_fenrir")
+#     response = llm.invoke(messages)
 
-    for gs, ps, audio in generator:
-        sf.write(str(out), audio, 24000)
-        break
-
-    return out.name
+#     return response.content.strip()
 
 
-# =========================
-# STT
-# =========================
+# # =========================
+# # TTS
+# # =========================
 
-def transcribe_audio(audio_url):
+# def synthesize(text):
 
-    tmp = tempfile.NamedTemporaryFile(
-        suffix=".wav",
-        delete=False
-    )
+#     out = AUDIO_DIR / f"reply_{int(time.time()*1000)}.wav"
 
-    password_mgr = urllib.request.HTTPPasswordMgrWithDefaultRealm()
+#     generator = tts(text, voice="am_fenrir")
 
-    password_mgr.add_password(
-        None,
-        audio_url,
-        TWILIO_ACCOUNT_SID,
-        TWILIO_AUTH_TOKEN
-    )
+#     for gs, ps, audio in generator:
+#         sf.write(str(out), audio, 24000)
+#         break
 
-    opener = urllib.request.build_opener(
-        urllib.request.HTTPBasicAuthHandler(password_mgr)
-    )
+#     return out.name
 
-    with opener.open(audio_url + ".wav") as resp:
-        tmp.write(resp.read())
 
-    tmp.flush()
+# # =========================
+# # STT
+# # =========================
 
-    result = stt(tmp.name)
+# def transcribe_audio(audio_url):
 
-    os.unlink(tmp.name)
+#     tmp = tempfile.NamedTemporaryFile(
+#         suffix=".wav",
+#         delete=False
+#     )
 
-    return result["text"].strip()
+#     password_mgr = urllib.request.HTTPPasswordMgrWithDefaultRealm()
+
+#     password_mgr.add_password(
+#         None,
+#         audio_url,
+#         TWILIO_ACCOUNT_SID,
+#         TWILIO_AUTH_TOKEN
+#     )
+
+#     opener = urllib.request.build_opener(
+#         urllib.request.HTTPBasicAuthHandler(password_mgr)
+#     )
+
+#     with opener.open(audio_url + ".wav") as resp:
+#         tmp.write(resp.read())
+
+#     tmp.flush()
+
+#     result = stt(tmp.name)
+
+#     os.unlink(tmp.name)
+
+#     return result["text"].strip()
