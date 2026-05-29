@@ -17,7 +17,6 @@ import random
 import re
 import os
 
-
 def generate_otp():
     return str(random.randint(100000, 999999))
 
