@@ -14,6 +14,9 @@ import random
 import re
     
 
+
+print("User views loaded successfully.")
+
 # from django.http import HttpResponse
 # from django.views.decorators.csrf import csrf_exempt
 # from twilio.twiml.voice_response import VoiceResponse, Gather
