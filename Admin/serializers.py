@@ -43,15 +43,3 @@ class UserUpdateSerializer(serializers.ModelSerializer):
 
         return value
     
-class MediaFileSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = MediaFile
-
-        fields = ['id','user','file_type','file','file_url','file_name','created_at','updated_at']
-    
-class ProductSerializer(serializers.ModelSerializer):
-    category_name = serializers.CharField(source='category.category_name',read_only=True)
-    class Meta:
-        model = Product
-
-        fields = ['id','product_name','description','price','quantity','category','category_name','product_image','product_image_url','status','created_at','updated_at']

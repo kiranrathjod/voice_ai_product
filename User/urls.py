@@ -8,6 +8,8 @@ urlpatterns = [
     path('api/v1/resend-otp', OtpResendAPI.as_view()),
 
     path('api/v1/login', LoginAPI.as_view()),
+    path('api/v1/auth/verify-login', VerifyLoginAPI.as_view()),
+    path('api/v1/auth/resend-login-otp', LoginOTPResendAPI.as_view()),
 
     path('api/v1/forgot-password', ForgotPasswordAPI.as_view()),
     path('api/v1/forgot-password-verify-otp', Forgot_Otp_API.as_view()),
@@ -15,17 +17,16 @@ urlpatterns = [
     path('api/v1/change-password', Reset_Password_API.as_view()),
 
     path('api/v1/update-profile', UserUpdateProfileAPI.as_view()),
+    path('api/v1/delete-account', DeleteUserAPI.as_view()),
     path('api/v1/logout', LogoutAPI.as_view()),
 
-    path('media-file-list/',MediaFileListAPI.as_view(),name='media-file-list'),
-    path('media-files/<uuid:id>/',MediaFileListAPI.as_view(),name='single-media-file'),
+    path('api/v1/create-campaign', CreateCampaignAPI.as_view()),
+    path('api/v1/update-campaign/<uuid:id>', UpdateCampaignAPI.as_view()),
+    path('api/v1/delete-campaign/<uuid:id>', DeleteCampaignAPI.as_view()),
 
-    path('products/',ProductListAPI.as_view(),name='product-list'),
-    path('products/<uuid:id>/',ProductListAPI.as_view(),name='single-product'),
+    path('voice/', voice),
 
-    path('filter-products/', ProductFilterAPI.as_view()),
-    path('sort-products/', SortProductAPI.as_view()),
-    
+    path('transcribe/', transcribe),
 ]
 
 

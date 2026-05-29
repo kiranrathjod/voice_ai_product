@@ -43,7 +43,7 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt.token_blacklist',
     "Admin",
     "User",
-    'corsheaders',
+    
 ]
 CORS_ALLOW_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
 REST_FRAMEWORK = {
@@ -54,8 +54,6 @@ REST_FRAMEWORK = {
 
 }
 MIDDLEWARE = [
-    # add CORS middleware 
-    'corsheaders.middleware.CorsMiddleware',
 
     'test_project.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',

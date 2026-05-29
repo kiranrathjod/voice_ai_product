@@ -50,10 +50,11 @@ class User_Master(AbstractBaseUser,PermissionsMixin):
     photo = models.ImageField(upload_to='users/', null=True, blank=True)
     user_type = models.ForeignKey(User_Type,on_delete=models.CASCADE)
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='Active')
+    otp = models.CharField(max_length=6, null=True, blank=True)
+    otp_time_limit = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     USERNAME_FIELD = 'email'
-    REQUIRED_FIELDS = ['username', 'phone_number']
     
     def __str__(self):
         return self.email
@@ -63,98 +64,79 @@ class User_Master(AbstractBaseUser,PermissionsMixin):
         
     objects = UserManager()
 
-# this model use in Admin login otp save 
-class AdminLoginOTP(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user = models.ForeignKey(User_Master,on_delete=models.CASCADE)
-    otp = models.CharField(max_length=6, null=True)   
-    otp_time_limit = models.DateTimeField(null=True, blank=True) 
-    created_at_otp = models.DateTimeField(default=now) 
-    updated_at = models.DateTimeField(auto_now=True)
 
-    class Meta:
-        db_table = 'Login_otp'
 
-# this model use in forgot password and reset password api, because both api use otp for verification. 
-class User_OTP_Master(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user = models.ForeignKey(User_Master,on_delete=models.CASCADE)
-    otp = models.CharField(max_length=6, null=True) 
-    created_at = models.DateTimeField(default=now)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        db_table = 'user_otp_master'
-
-# FILE UPLOAD PATH FUNCTION
-def media_file_upload_path(instance, filename):
-
-    if instance.file_type == 'Image':
-        return f'images/{filename}'
-
-    elif instance.file_type == 'Document':
-        return f'documents/{filename}'
-
-    elif instance.file_type == 'Video':
-        return f'videos/{filename}'
-
-    return f'others/{filename}'
-
-class MediaFile(models.Model):
-    FILE_TYPE = (('Image', 'Image'),('Document', 'Document'),('Video', 'Video'))
+class Campaign(models.Model):
+    STATUS_CHOICES = (('Draft', 'Draft'),('Running', 'Running'),('Completed', 'Completed'),('Paused', 'Paused'),('Failed', 'Failed'),)
     id = models.UUIDField(primary_key=True,default=uuid.uuid4,editable=False)
-    user = models.ForeignKey(User_Master,on_delete=models.CASCADE)
-    file_type = models.CharField(max_length=20,choices=FILE_TYPE)
-    file = models.FileField(upload_to=media_file_upload_path)
+    user = models.ForeignKey(User_Master,on_delete=models.CASCADE,related_name='campaigns')
+    campaign_name = models.CharField(max_length=255)
+    agent_name = models.CharField(max_length=255)
+    language = models.CharField(max_length=50)
+    voice_gender = models.CharField(max_length=20)
+    voice_type = models.CharField(max_length=100)
+    calling_start_time = models.DateTimeField()
+    calling_end_time = models.DateTimeField()
+    max_retry_attempts = models.IntegerField(default=3)
+    status = models.CharField(max_length=50,choices=STATUS_CHOICES,default='Draft')
+    instruction_prompt = models.TextField(blank=True,null=True)
+    generated_prompt = models.TextField(blank=True,null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.campaign_name
+    class Meta:
+        db_table = 'campaigns'
+
+class ContactList(models.Model):
+    STATUS_CHOICES = (('Processing', 'Processing'),('Completed', 'Completed'),)
+    id = models.UUIDField(primary_key=True,default=uuid.uuid4,editable=False)
+    campaign = models.ForeignKey(Campaign,on_delete=models.CASCADE,related_name='contact_lists')
     file_name = models.CharField(max_length=255)
+    file_type = models.CharField(max_length=50)
+    upload_status = models.CharField(max_length=50,choices=STATUS_CHOICES,default='Processing')
+    file = models.FileField(upload_to='contact_lists/')
     file_url = models.URLField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    def __str__(self):
+        return self.file_name
+    
     class Meta:
-        db_table = 'media_files'
+        db_table = 'contact_lists'
 
-# NOTIFICATION MODEL
-class Notification(models.Model):
-    NOTIFICATION_TYPE = (('Email', 'Email'),('Push', 'Push'),)
-    STATUS = (('Unread', 'Unread'),('Read', 'Read'),)
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    sender = models.ForeignKey(User_Master,on_delete=models.CASCADE,related_name='sent_notifications')
-    receiver = models.ForeignKey(User_Master,on_delete=models.CASCADE,related_name='received_notifications')
-    notification_type = models.CharField(max_length=20,choices=NOTIFICATION_TYPE)
-    title = models.CharField(max_length=255)
-    message = models.TextField()
-    email_sent = models.BooleanField(default=False)
-    status = models.CharField(max_length=10,choices=STATUS,default='Unread')
+class Contact(models.Model):
+    VALID_STATUS = (('Valid', 'Valid'),('Invalid', 'Invalid'),('Duplicate', 'Duplicate'),)
+    id = models.UUIDField(primary_key=True,default=uuid.uuid4,editable=False)
+    contact_list = models.ForeignKey(ContactList,on_delete=models.CASCADE,related_name='contacts')
+    full_name = models.CharField(max_length=255)
+    phone = models.CharField(max_length=20)
+    email = models.EmailField(max_length=255)
+    validation_status = models.CharField(max_length=50,choices=VALID_STATUS,default='Valid')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    def __str__(self):
+        return self.full_name
+    
     class Meta:
-        db_table = 'notifications'
+        db_table = 'contacts'
 
-class Category(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    category_name=models.CharField(max_length=100)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    class Meta:
-        db_table = "Category"
+# class CallLog(models.Model):
 
-# PRODUCT MODEL (CRUD API)
-class Product(models.Model):
-    STATUS = (('Available', 'Available'),('OutOfStock', 'OutOfStock'))
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    product_name = models.CharField(max_length=255)
-    description = models.TextField()
-    price = models.DecimalField(max_digits=10, decimal_places=2)
-    quantity = models.IntegerField()
-    category = models.ForeignKey(Category, on_delete=models.CASCADE)
-    product_image = models.ImageField(upload_to='products/', null=True, blank=True)
-    product_image_url = models.URLField(null=True,blank=True)
-    status = models.CharField(max_length=20,choices=STATUS,default='Available')
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
 
-    class Meta:
-        db_table = 'products'
-        
+#     campaign = models.ForeignKey(Campaign)
+
+#     contact = models.ForeignKey(Contact)
+
+#     user_text = models.TextField()
+
+#     ai_response = models.TextField()
+
+#     call_sid = models.CharField(max_length=255)
+
+#     status = models.CharField(max_length=50)
+
+#     created_at = models.DateTimeField(auto_now_add=True)

@@ -6,13 +6,22 @@ class UserRegisterSerializer(serializers.ModelSerializer):
         model = AdminTempUser
         fields = ['username', 'email', 'phone', 'password','photo']
 
+        extra_kwargs = {
+            'photo': {'required': False}
+        }
+
     def validate_photo(self, value):
 
-        # Image size validation (5MB)
+        if not value:
+            return value
+
         if value.size > 5 * 1024 * 1024:
-            raise serializers.ValidationError("Image size exceeds 5MB limit.")
+            raise serializers.ValidationError(
+                "Image size exceeds 5MB limit."
+            )
 
         return value
+
     def validate_phone(self, value):
 
         if not value.isdigit():
@@ -43,16 +52,19 @@ class UserUpdateSerializer(serializers.ModelSerializer):
 
         return value
     
-class MediaFileSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = MediaFile
+class CampaignSerializer(serializers.ModelSerializer):
 
-        fields = ['id','user','file_type','file','file_url','file_name','created_at','updated_at']
-    
-class ProductSerializer(serializers.ModelSerializer):
-    category_name = serializers.CharField(source='category.category_name',read_only=True)
     class Meta:
-        model = Product
+        model = Campaign
+        fields = '__all__'
+        read_only_fields =  ['user']
 
-        fields = ['id','product_name','description','price','quantity','category','category_name','product_image','product_image_url','status','created_at','updated_at']
-        
+
+class CampaignUpdateSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = Campaign
+        fields =['campaign_name','agent_name','language','voice_gender','voice_type','calling_start_time','calling_end_time','max_retry_attempts','status','calling_end_time','max_retry_attempts','status']
+
+
+

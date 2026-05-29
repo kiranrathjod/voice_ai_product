@@ -12,18 +12,87 @@ from .models import *
 from .serializers import *
 import random
 import re
+    
+from django.http import HttpResponse
+from django.views.decorators.csrf import csrf_exempt
+from twilio.twiml.voice_response import VoiceResponse, Gather
+
+from .voice_assistant import (
+    ask_llm,
+    synthesize
+)
+
+PUBLIC_URL = "https://YOUR_NGROK_URL.ngrok-free.app"
+
+
+@csrf_exempt
+def voice(request):
+
+    vr = VoiceResponse()
+
+    gather = Gather(
+        input="speech",
+        action=f"{PUBLIC_URL}/user/transcribe/",
+        method="POST",
+        speech_timeout="auto",
+        language="en-US",
+    )
+
+    gather.say("Hello! I am your AI assistant. How can I help you?",voice="alice")
+
+    vr.append(gather)
+
+    return HttpResponse(str(vr),content_type="application/xml")
+
+
+@csrf_exempt
+def transcribe(request):
+
+    user_text = request.POST.get("SpeechResult", "").strip()
+    vr = VoiceResponse()
+
+    if not user_text:
+        vr.say("Sorry I did not catch that.",voice="alice")
+        vr.redirect(f"{PUBLIC_URL}/user/voice/",method="POST")
+
+        return HttpResponse(str(vr),content_type="application/xml")
+
+    print("USER:", user_text)
+
+    if user_text.lower() in ["bye","goodbye","exit","quit"]:
+        vr.say("Goodbye!",voice="alice")
+
+        vr.hangup()
+
+        return HttpResponse(str(vr),content_type="application/xml")
+
+    # AI RESPONSE
+    reply = ask_llm(user_text)
+
+    print("AI:", reply)
+
+    # GENERATE AUDIO
+    audio_file = synthesize(reply)
+
+    audio_url = f"{PUBLIC_URL}/media/tts_audio/{audio_file}"
+
+    vr.play(audio_url)
+
+    vr.redirect(f"{PUBLIC_URL}/user/voice/",method="POST")
+
+    return HttpResponse(str(vr),content_type="application/xml")
 
 
 def generate_otp():
     return str(random.randint(100000, 999999))
 
 def otp_expiry():
-    return now() + timedelta(minutes=3)
+    return now() + timedelta(minutes=10)
 
 def send_otp_email(email, otp):
     send_mail(
         subject='Your OTP Code',
-        message=f'''Your OTP is: {otp} This OTP is valid for 3 minutes.''',
+        message=f'''Your OTP is: {otp} This OTP is valid for 10 minutes.''',
         from_email=settings.EMAIL_HOST_USER,
         recipient_list=[email],
         fail_silently=False
@@ -32,19 +101,19 @@ def send_otp_email(email, otp):
 def validate_password(value):
 
     if len(value) < 8:
-        raise serializers.ValidationError({'status': 0,'error': 'InvalidPasswordFormat','message': 'Password must be at least 8 characters long.'})
+        raise serializers.ValidationError({'status': 0,'error': 'InvalidPasswordFormat','message': 'Password must be at least 8 characters long.'},status=200)
 
     if not re.search(r'[A-Z]', value):
-        raise serializers.ValidationError({'status': 0,'error': 'InvalidPasswordFormat','message': 'Password must include at least one uppercase letter.'})
+        raise serializers.ValidationError({'status': 0,'error': 'InvalidPasswordFormat','message': 'Password must include at least one uppercase letter.'},status=200)
 
     if not re.search(r'[a-z]', value):
-        raise serializers.ValidationError({'status': 0,'error': 'InvalidPasswordFormat','message': 'Password must contain at least one lowercase letter.'})
+        raise serializers.ValidationError({'status': 0,'error': 'InvalidPasswordFormat','message': 'Password must contain at least one lowercase letter.'},status=200)
 
     if not re.search(r'\d', value):
-        raise serializers.ValidationError({'status': 0,'error': 'InvalidPasswordFormat','message': 'Password must contain at least one numeric character.'})
+        raise serializers.ValidationError({'status': 0,'error': 'InvalidPasswordFormat','message': 'Password must contain at least one numeric character.'},status=200)
 
     if not re.search(r'[!@#$%^&*()_+\-=\[\]{};:"\\|,.<>\/?]', value):
-        raise serializers.ValidationError({'status': 0,'error': 'InvalidPasswordFormat','message': 'Password must contain at least one special character.'})
+        raise serializers.ValidationError({'status': 0,'error': 'InvalidPasswordFormat','message': 'Password must contain at least one special character.'},status=200)
 
     return value
 
@@ -72,8 +141,11 @@ class UserRegistrationAPI(APIView):
 
             # Generate OTP
             otp = generate_otp()
+            
+            temp_user = serializer.save(
+                password=make_password(password)
+            )
             # Save Temp User
-            temp_user = serializer.save()
             temp_user.otp = otp
             temp_user.otp_time_limit = otp_expiry()
             temp_user.save()
@@ -89,56 +161,65 @@ class UserRegistrationAPI(APIView):
                         'email': temp_user.email,
                         'phone': temp_user.phone,
                         'photo': request.build_absolute_uri(temp_user.photo.url) if temp_user.photo else None}},status=200)
-
+          
         return Response({'status': 0,'message': 'Validation Error','errors': serializer.errors},status=200)
 
 # OTP verification for registration, including expiry check, duplicate user check, and JWT token generation upon successful verification.
 class OtpVerificationAPI(APIView):
 
     def post(self, request):
+
         email = request.data.get('email')
         otp = request.data.get('otp')
+
+        if not email or not otp:
+            return Response({'status': 0,'message': 'Email and OTP are required','data': None}, status=200)
+
+        temp_user = AdminTempUser.objects.filter(email=email).order_by('-created_at').first()
+
+        if not temp_user:
+            return Response({'status': 0,'message': 'User not found','data': None}, status=200)
+
+        # OTP expiry check
+        if not temp_user.is_otp_valid():
+            return Response({'status': 0,'message': 'OTP Expired','data': None}, status=200)
+
+        # OTP match check
+        if str(temp_user.otp) != str(otp):
+            return Response({'status': 0,'message': 'Invalid OTP','data': None}, status=200)
+
+        # Duplicate user check
+        if User_Master.objects.filter(email=temp_user.email).exists():
+            return Response({'status': 0,'message': 'User already verified','data': None}, status=200)
+
+        # User type check
         try:
-            temp_user = AdminTempUser.objects.filter(email=email).order_by('-created_at').first()
-            if not temp_user:
-                return Response({'status': 0,'message': 'User not found','data': None}, status=200)
+            user_type = User_Type.objects.get(user_type_name='User')
 
-            # OTP expiry check
-            if not temp_user.is_otp_valid():
-                return Response({'status': 0,'message': 'OTP Expired','data': None}, status=200)
-            
-            if temp_user.otp != otp:
-                return Response({'status': 0,'message': 'Invalid OTP','data': None}, status=200)
+        except User_Type.DoesNotExist:
+            return Response({'status': 0,'message': 'User type not found','data': None}, status=200)
 
-            # Duplicate user check
-            if User_Master.objects.filter(email=temp_user.email).exists():
-                return Response({'status': 0,'message': 'User already verified','data': None}, status=200)
+        # Create main user
+        user = User_Master.objects.create(
+            username=temp_user.username,
+            photo=temp_user.photo,
+            email=temp_user.email,
+            password=temp_user.password,
+            phone=temp_user.phone,
+            user_type=user_type
+        )
 
-            # User type check
-            user_type, created = User_Type.objects.get_or_create(user_type_name='User')
-           
-            # Create main user
-            user = User_Master.objects.create(
-                username=temp_user.username,
-                photo=temp_user.photo,
-                email=temp_user.email,
-                password=temp_user.password,
-                phone=temp_user.phone,
-                user_type=user_type
-            )
-            refresh = RefreshToken.for_user(user)
-            # Delete temp user
-            temp_user.delete()
+        refresh = RefreshToken.for_user(user)
 
-            return Response({
-                'status': 1,
-                'message': 'Account verified successfully',
-                'refresh': str(refresh),
-                'access': str(refresh.access_token)
-            }, status=200)
+        # Delete temp user
+        temp_user.delete()
 
-        except Exception as e:
-            return Response({'status': 0,'message': 'Internal Server Error','data': None}, status=200)
+        return Response({
+            'status': 1,
+            'message': 'Account verified successfully',
+            'refresh': str(refresh),
+            'access': str(refresh.access_token)
+        }, status=200)
 
 # Resend OTP for registration, reusing valid OTP or generating a new one if expired, and sending it via email.
 class OtpResendAPI(APIView):
@@ -169,133 +250,225 @@ class OtpResendAPI(APIView):
 
 # Login API with email and password, including validation, JWT token generation, and error handling for invalid credentials and unregistered emails.
 class LoginAPI(APIView):
+
     def post(self, request):
+
         email = request.data.get('email')
         password = request.data.get('password')
 
         if not email or not password:
-            return Response({'status': 0,'message': 'Email and password are required',"data": None}, status=200)
+            return Response({'status': 0,'message': 'Email and password required'}, status=200)
+
         try:
             user = User_Master.objects.get(email=email)
-            if password != user.password:
-                return Response({'status': 0,'message': 'Invalid password',"data": None}, status=200)
-            refresh = RefreshToken.for_user(user)
-            access_token = str(refresh.access_token)
-            refresh_token = str(refresh)
 
-            return Response({'status': 1,'message': 'Login successfully', 'data': {'access': access_token, 'refresh': refresh_token}}, status=200)
-        except User_Master.DoesNotExist:
-            return Response({'status': 0,'message': 'Email not registered','data': None}, status=200)
-        except Exception as e:
-            return Response({'status': 0,'message': 'Login failed','data': None}, status=200)
+            if user.status != 'Active':
+                return Response({'status': 0, 'message': 'Your account is deactivated. Please contact support.', 'data': None},status=200)
 
-# Sends OTP to user's email for password reset after validating registered email
-class ForgotPasswordAPI(APIView):
-    def post(self, request):
-        email = request.data.get("email")  
-
-        if not email:
-            return Response({'status':0 ,'message':'Email are required','data':None},status=200)
-        try:
-            user = User_Master.objects.get(email = email)
-            if not user.email:
-                return Response({'status': 0, 'message': 'Email not registered','data':None}, status=200)
+            if not check_password(password, user.password):
+                return Response({'status': 0,'message': 'Invalid Password'}, status=200)
 
             otp = generate_otp()
 
-            User_OTP_Master.objects.create(user=user,otp=otp,otp_time_limit=otp_expiry())
+            user.otp = otp
+            user.otp_time_limit = otp_expiry()
+            user.save()
+
             send_otp_email(user.email, otp)
 
-            return Response({'status': 1,'message': 'OTP sent to your email','data':'otp expired in 3 min'}, status=200)
+            return Response({'status': 1,'message': 'OTP sent successfully'}, status=200)
 
-        except Exception as e:
-            return Response({'status': 0, 'message': 'Internal Server Error', 'data': None},status=200)            
+        except User_Master.DoesNotExist:
+            return Response({'status': 0,'message': 'Email not registered'}, status=200)
+
+
+# OTP verification for login, including expiry check and JWT token generation upon successful verification.
+class VerifyLoginAPI(APIView):
+
+    def post(self, request):
+
+        email = request.data.get('email')
+        otp = request.data.get('otp')
+
+        try:
+            user = User_Master.objects.get(email=email)
+
+            if user.otp != otp:
+                return Response({'status': 0,'message': 'Invalid OTP'}, status=200)
+
+            if now() > user.otp_time_limit:
+                return Response({'status': 0,'message': 'OTP Expired'}, status=200)
+
+            # Clear OTP
+            user.otp = None
+            user.otp_time_limit = None
+            user.save()
+
+            refresh = RefreshToken.for_user(user)
+
+            return Response({
+                'status': 1,
+                'message': 'Login successful',
+                'access': str(refresh.access_token),
+                'refresh': str(refresh)})
+
+        except User_Master.DoesNotExist:
+            return Response({'status': 0,'message': 'User not found'}, status=200)
+
+# Resend OTP for login, reusing valid OTP or generating a new one if expired, and sending it via email.
+class LoginOTPResendAPI(APIView):
+
+    def post(self, request):
+        email = request.data.get('email')
+        try:
+            user = User_Master.objects.get(email=email)
+            otp = generate_otp()
+            user.otp = otp
+            user.otp_time_limit = otp_expiry()
+            user.save()
+
+            send_otp_email(user.email, otp)
+
+            return Response({'status': 1,'message': 'OTP resent successfully'}, status=200)
+
+        except User_Master.DoesNotExist:
+            return Response({'status': 0,'message': 'User not found'}, status=200)
+
+# Sends OTP to user's email for password reset after validating registered email
+class ForgotPasswordAPI(APIView):
+
+    def post(self, request):
+
+        email = request.data.get('email')
+
+        try:
+            user = User_Master.objects.get(email=email)
+
+            otp = generate_otp()
+
+            user.otp = otp
+            user.otp_time_limit = otp_expiry()
+            user.save()
+
+            send_otp_email(user.email, otp)
+
+            return Response({'status': 1,'message': 'OTP sent successfully'}, status=200)
+
+        except User_Master.DoesNotExist:
+            return Response({'status': 0,'message': 'Email not registered'}, status=200)
 
 # Verifies forgot password OTP and checks expiry before allowing password reset
 class Forgot_Otp_API(APIView):
-   
+
     def post(self, request):
+
         email = request.data.get('email')
         otp = request.data.get('otp')
-        if not email or not otp:
-            return Response({'status': 0, 'message': 'Email and OTP are required','data':None}, status=200)
+
         try:
-            email_otp = User_OTP_Master.objects.filter(user__email=email, otp=otp).order_by('-created_at').first()
-            if not email_otp:
-                return Response({'status': 0, 'message': 'Invalid OTP','data':None}, status=200)
+            user = User_Master.objects.get(email=email)
 
-            if now() > email_otp.otp_time_limit:
-                return Response({'status': 0, 'message': 'OTP Expired','data':None}, status=200)
+            if user.otp != otp:
+                return Response({'status': 0,'message': 'Invalid OTP'}, status=200)
 
-            return Response({'status': 1, 'message': 'OTP verified. Proceed to reset password.','data':None}, status=200)
-        except Exception as e:
-            return Response({'status': 0, 'message': 'Internal Server Error', 'data': None}, status=200)
+            if now() > user.otp_time_limit:
+                return Response({'status': 0,'message': 'OTP Expired'}, status=200)
+
+            return Response({'status': 1,'message': 'OTP verified successfully'}, status=200)
+
+        except User_Master.DoesNotExist:
+            return Response({'status': 0,'message': 'User not found'}, status=200)
 
 # Resends forgot password OTP, reusing valid OTP or generating a new one if expired
 class Resend_Forgot_Otp_API(APIView):
+
     def post(self, request):
+
         email = request.data.get("email")
+
         if not email:
-            return Response({'status': 0, 'message': 'Email is required','data':None}, status=200)
+            return Response({'status': 0,'message': 'Email is required','data': None}, status=200)
+
         try:
             user = User_Master.objects.get(email=email)
-            if not user.email:
-                return Response({'status': 0, 'message': 'Email not registered','data':None}, status=200)
-            email_otp = User_OTP_Master.objects.filter(user=user).order_by('-created_at').first()
-            if email_otp and now() <= email_otp.otp_time_limit:
-                otp = email_otp.otp
+
+            # OTP still valid
+            if user.otp and user.otp_time_limit and now() <= user.otp_time_limit:
+                otp = user.otp
+
             else:
                 otp = generate_otp()
-                User_OTP_Master.objects.create(user=user, otp=otp, otp_time_limit=otp_expiry())
+
+                user.otp = otp
+                user.otp_time_limit = otp_expiry()
+                user.save()
+
             send_otp_email(user.email, otp)
+
             return Response({
                 'status': 1,
-                'message': f"OTP sent to your email. It is valid for 3 minutes.",
+                'message': 'OTP sent successfully',
                 'data': {
                     'email': user.email,
-                    'otp_valid_till': email_otp.otp_time_limit.strftime("%Y-%m-%d %H:%M:%S"),}}, status=200)
-        
+                    'otp_valid_till': user.otp_time_limit.strftime("%Y-%m-%d %H:%M:%S")}}, status=200)
+
+        except User_Master.DoesNotExist:
+            return Response({'status': 0,'message': 'Email not registered','data': None}, status=200)
+
         except Exception as e:
-            return Response({'status': 0, 'message': 'Internal Server Error', 'data': None}, status=200)
+            return Response({'status': 0,'message': 'Internal Server Error','data': str(e)}, status=200)
 
 # Validates new password, matches confirmation, updates hashed password, and removes OTP record
 class Reset_Password_API(APIView):
+
     def post(self, request):
+
+        email = request.data.get('email')
         new_password = request.data.get('new_password')
         confirm_password = request.data.get('confirm_password')
 
-        email = request.data.get('email')
         if not email:
-            return Response({'status': 0, 'message': 'Email not found. Try again.','data':None}, status=200)
-        
+            return Response({'status': 0,'message': 'Email is required','data': None}, status=200)
+
         if not new_password or not confirm_password:
-            return Response({'status': 0, 'message': 'Both new_password and confirm_password are required','data':None}, status=200)
-        
+            return Response({'status': 0,'message': 'Both passwords are required','data': None}, status=200)
+
         if new_password != confirm_password:
-            return Response({'status': 0, 'message': 'Passwords do not match','data':None}, status=200)
+            return Response({'status': 0,'message': 'Passwords do not match','data': None}, status=200)
+
         try:
             validate_password(new_password)
+
             user = User_Master.objects.get(email=email)
-            if not user.email:
-                return Response({'status': 0, 'message': 'Email not registered','data':None}, status=200)
 
-            # Check if new password matches old password
+            # Old password check
             if check_password(new_password, user.password):
-                return Response({'status': 0, 'message': 'You cannot use your previous password. Try another password.','data':None}, status=200)
+                return Response({'status': 0,'message': 'You cannot use old password','data': None}, status=200)
 
-            # Hash and update the new password
+            # Update password
             user.password = make_password(new_password)
+
+            # Clear OTP
+            user.otp = None
+            user.otp_time_limit = None
+
             user.save()
 
-            # Delete OTP 
-            User_OTP_Master.objects.filter(user=user).delete()
             refresh = RefreshToken.for_user(user)
-            access_token = str(refresh.access_token)
-            refresh_token = str(refresh)
 
-            return Response({'status': 1,'message': 'Password reset successfully.','data': {"access": access_token, "refresh": refresh_token}}, status=200)
+            return Response({
+                'status': 1,
+                'message': 'Password reset successfully',
+                'data': {'access': str(refresh.access_token),'refresh': str(refresh)}}, status=200)
+
+        except User_Master.DoesNotExist:
+            return Response({'status': 0,'message': 'Email not registered','data': None}, status=200)
+
+        except serializers.ValidationError as e:
+            return Response({'status': 0,'message': 'Validation Error','errors': e.detail}, status=200)
+
         except Exception as e:
-            return Response({'status': 0, 'message': 'Internal Server Error', 'data': None},status=200)
+            return Response({'status': 0,'message': 'Internal Server Error','data': str(e)}, status=200)
 
 # User profile update API that allows authenticated users to update their username, phone, and photo with validation and returns updated profile data.
 class UserUpdateProfileAPI(APIView):
@@ -351,139 +524,54 @@ class DeleteUserAPI(APIView):
             return Response({"status": 1, "message": "User deleted successfully"}, status=200)
         except User_Master.DoesNotExist:
             return Response({"status": 0, "message": "User not found","data":None}, status=200)
-
-# GET ALL FILES API
-class MediaFileListAPI(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request, id=None):
-        try:
-            user = request.user
-            # SINGLE FILE GET
-            if id:
-                try:
-                    media_file = MediaFile.objects.get(id=id,user=user)
-                except MediaFile.DoesNotExist:
-                    return Response({'status': 0,'message': 'Media file not found','data': None}, status=200)
-
-                serializer = MediaFileSerializer(media_file,context={'request': request})
-
-                return Response({'status': 1,'message': 'Single media file','data': serializer.data}, status=200)
-            # ALL FILES GET
-            media_files = MediaFile.objects.filter(user=user).order_by('-created_at')
-
-            if not media_files.exists():
-                return Response({'status': 0,'message': 'No media files found','data': None}, status=200)
-
-            serializer = MediaFileSerializer(media_files,many=True,context={'request': request})
-
-            return Response({'status': 1,'message': 'Media file list','data': serializer.data}, status=200)
-
-        except Exception as e:
-            return Response({'status': 0,'message': 'Internal Server Error','data': None}, status=200)
-
-# PRODUCT LIST + SINGLE PRODUCT API
-class ProductListAPI(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request, id=None):
-        try:
-            # SINGLE PRODUCT
-            if id:
-                try:
-                    product = Product.objects.get(id=id)
-                except Product.DoesNotExist:
-                    return Response({'status': 0,'message': 'Product not found','data': None}, status=200)
-
-                serializer = ProductSerializer(product,context={'request': request})
-
-                return Response({'status': 1,'message': 'Single product','data': serializer.data}, status=200)
-
-            # ALL PRODUCTS
-            products = Product.objects.all().order_by('-created_at')
-
-            if not products.exists():
-                return Response({'status': 0,'message': 'No products found','data': None}, status=200)
-
-            serializer = ProductSerializer(products,many=True,context={'request': request})
-
-            return Response({'status': 1,'message': 'Product list','data': serializer.data}, status=200)
-        except Exception as e:
-            return Response({'status': 0,'message': 'Internal Server Error','data': None}, status=200)
-
-class ProductFilterAPI(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        try:
-            products = Product.objects.all()
-            product_name = request.GET.get('product_name')
-            price = request.GET.get('price')
-            category = request.GET.get('category')
-
-            if product_name:
-                products = products.filter(product_name__icontains=product_name)
-
-            if price:
-                products = products.filter(price=price)
-
-            if category:
-                products = products.filter(category__category_name__icontains=category)
-
-            sort = request.GET.get('sort')
-            valid_sort_fields = [
-                'product_name',
-                '-product_name',
-                'price',
-                '-price',
-                'category__category_name',
-                '-category__category_name',]
-
-            if sort:
-                if sort not in valid_sort_fields:
-                    return Response({'status': 0,'message': 'Invalid sorting field','data': None}, status=200)
-
-                products = products.order_by(sort)
-
-            if not products.exists():
-                return Response({'status': 0,'message': 'No products found','data':None}, status=200)
-
-            serializer = ProductSerializer(products, many=True)
-
-            return Response({'status': 1,'message': 'Products fetched successfully','data': serializer.data}, status=200)
-
-        except Exception as e:
-            return Response({'status': 0,'message': str(e),'data': None}, status=200)
         
-class SortProductAPI(APIView):
+class CreateCampaignAPI(APIView):
+    permission_classes = [IsAuthenticated]
+    def post(self, request):
+        serializer = CampaignSerializer(data=request.data)
+
+        if serializer.is_valid():
+            serializer.save(user=request.user)
+
+            return Response({'status': 1,'message': 'Campaign created successfully','data': serializer.data})
+
+        return Response({'status': 0,'message': 'Validation error','errors': serializer.errors},status=200)
+
+
+class UpdateCampaignAPI(APIView):
+
     permission_classes = [IsAuthenticated]
 
-    def get(self, request):
+    def put(self, request, id):
+
         try:
-            sort = request.GET.get('sort')
-            products = Product.objects.all()
-            valid_sort_fields = [
-                'product_name',
-                '-product_name',
-                'price',
-                '-price',
-                'category__category_name',
-                '-category__category_name',]
+            campaign = Campaign.objects.get(id=id, user=request.user)
 
-            # CHECK SORT FIELD
-            if sort:
-                if sort not in valid_sort_fields:
-                    return Response({'status': 0,'message': 'Invalid sorting field','data': None}, status=200)
+        except Campaign.DoesNotExist:
+            return Response({'status': 0,'message': 'Campaign not found','data': None},status=200)
 
-                products = products.order_by(sort)
+        serializer = CampaignUpdateSerializer(campaign,data=request.data,partial=True)
 
-            if not products.exists():
-                return Response({'status': 0,'message': 'No products found','data':None}, status=200)
+        if serializer.is_valid():
 
-            serializer = ProductSerializer(products, many=True)
-           
-            return Response({'status': 1,'message': 'Products sorted successfully','data': serializer.data}, status=200)
+            serializer.save()
 
-        except Exception as e:
-            return Response({'status': 0,'message': str(e),'data': None}, status=200)
-        
+            return Response({'status': 1,'message': 'Campaign updated successfully','data': serializer.data},status=200)
+
+        return Response({'status': 0,'message': 'Validation error','errors': serializer.errors},status=200)
+
+class DeleteCampaignAPI(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, id):
+        try:
+            campaign = Campaign.objects.get(id=id, user=request.user)
+
+        except Campaign.DoesNotExist:
+            return Response({'status': 0,'message': 'Campaign not found','data': None},status=200)
+
+        campaign.delete()
+
+        return Response({'status': 1,'message': 'Campaign deleted successfully','data': None},status=200)
+
